@@ -1,0 +1,926 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Workflow Engine Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .status-success { color: #10b981; font-weight: bold; }
+        .status-failed { color: #ef4444; font-weight: bold; }
+        .status-running { color: #3b82f6; font-weight: bold; }
+        .status-skipped { color: #f59e0b; font-weight: bold; }
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); backdrop-filter: blur(4px); z-index: 50; }
+        .toast { animation: slideIn 0.3s ease-out; }
+        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        .skeleton { background: linear-gradient(90deg, #1e293b 25%, #334155 50%, #1e293b 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; }
+        @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+        .action-row { transition: all 0.2s ease; }
+        .action-row:hover { border-color: #3b82f6; }
+        .btn-loading { position: relative; color: transparent !important; }
+        .btn-loading::after { content: ""; position: absolute; width: 16px; height: 16px; top: 50%; left: 50%; margin: -8px 0 0 -8px; border: 2px solid #fff; border-right-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen font-sans">
+
+    <!-- Toast Container -->
+    <div id="toast-container" class="fixed top-4 right-4 z-50 flex flex-col gap-2"></div>
+    <!-- Login -->
+    <div id="login-overlay" style="display:none; z-index:45;" class="fixed inset-0 bg-slate-950 flex items-center justify-center p-4">
+        <form onsubmit="doLogin(event)" class="w-full max-w-sm bg-slate-900 border border-slate-700 rounded-2xl p-6 shadow-2xl space-y-4">
+            <div class="text-center">
+                <h2 class="text-2xl font-bold">Workflow Engine</h2>
+                <p class="text-sm text-slate-400">Entre para continuar</p>
+            </div>
+            <div>
+                <label class="block text-sm text-slate-400 mb-1" for="login-username">Usuário</label>
+                <input id="login-username" type="text" autocomplete="username" required class="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-blue-500 text-sm">
+            </div>
+            <div>
+                <label class="block text-sm text-slate-400 mb-1" for="login-password">Senha</label>
+                <input id="login-password" type="password" autocomplete="current-password" required class="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-blue-500 text-sm">
+            </div>
+            <p id="login-error" class="text-sm text-red-400 hidden"></p>
+            <button id="login-btn" type="submit" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-xl py-2.5 transition-colors">Entrar</button>
+            <button type="button" onclick="showRegister()" class="w-full text-sm text-slate-400 hover:text-white transition-colors">Criar conta</button>
+        </form>
+    </div>
+    <!-- Registro -->
+    <div id="register-overlay" style="display:none; z-index:45;" class="fixed inset-0 bg-slate-950 flex items-center justify-center p-4">
+        <form onsubmit="doRegister(event)" class="w-full max-w-sm bg-slate-900 border border-slate-700 rounded-2xl p-6 shadow-2xl space-y-4">
+            <div class="text-center">
+                <h2 class="text-2xl font-bold">Criar conta</h2>
+                <p class="text-sm text-slate-400">Preencha para se cadastrar</p>
+            </div>
+            <div>
+                <label class="block text-sm text-slate-400 mb-1" for="reg-username">Usuário</label>
+                <input id="reg-username" type="text" autocomplete="username" required class="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-blue-500 text-sm">
+            </div>
+            <div>
+                <label class="block text-sm text-slate-400 mb-1" for="reg-password">Senha</label>
+                <input id="reg-password" type="password" autocomplete="new-password" required class="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-blue-500 text-sm">
+            </div>
+            <div>
+                <label class="block text-sm text-slate-400 mb-1" for="reg-confirm">Confirmar senha</label>
+                <input id="reg-confirm" type="password" autocomplete="new-password" required class="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-blue-500 text-sm">
+            </div>
+            <p id="reg-error" class="text-sm text-red-400 hidden"></p>
+            <button id="reg-btn" type="submit" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-xl py-2.5 transition-colors">Criar conta</button>
+            <button type="button" onclick="backToLogin()" class="w-full text-sm text-slate-400 hover:text-white transition-colors">Já tenho conta</button>
+        </form>
+    </div>
+    <button id="logout-btn" type="button" onclick="logout()" style="display:none; z-index:40;" class="fixed bottom-4 left-4 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-xs rounded-lg px-3 py-2">Sair</button>
+
+    <div class="container mx-auto px-4 py-8">
+        <!-- Header -->
+        <header class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-10 gap-4 py-6 border-b border-slate-800">
+            <div class="flex items-center gap-6">
+                <div class="p-3 bg-gradient-to-br from-blue-600 to-emerald-600 rounded-xl shadow-lg">
+                    <i class="fas fa-sitemap text-2xl text-white"></i>
+                </div>
+                <div>
+                    <h1 class="text-3xl sm:text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-emerald-400">
+                        Workflow Engine
+                    </h1>
+                    <p class="text-slate-400 text-sm">Gerencie e execute seus fluxos de trabalho de forma assíncrona</p>
+                </div>
+            </div>
+            <div class="flex flex-wrap gap-3 w-full sm:w-auto justify-end">
+                <div id="connection-status" class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-800 border border-slate-700 text-xs">
+                    <div class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+                    <span>API Online</span>
+                </div>
+                <button onclick="openWorkflowModal()" class="bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-2.5 rounded-xl font-semibold transition-all shadow-lg flex items-center gap-2">
+                    <i class="fas fa-plus"></i> Novo Workflow
+                </button>
+            </div>
+        </header>
+
+        <!-- Stats Cards -->
+        <div id="stats-section" class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+            <div class="bg-slate-800/50 border border-slate-700 rounded-2xl p-5 skeleton">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-slate-400 text-sm">Total Workflows</p>
+                        <p id="stat-total" class="text-3xl font-bold text-white mt-1">—</p>
+                    </div>
+                    <div class="p-3 bg-blue-600/20 rounded-xl"><i class="fas fa-sitemap text-blue-400 text-2xl"></i></div>
+                </div>
+            </div>
+            <div class="bg-slate-800/50 border border-slate-700 rounded-2xl p-5 skeleton">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-slate-400 text-sm">Ativos</p>
+                        <p id="stat-active" class="text-3xl font-bold text-emerald-400 mt-1">—</p>
+                    </div>
+                    <div class="p-3 bg-emerald-600/20 rounded-xl"><i class="fas fa-play-circle text-emerald-400 text-2xl"></i></div>
+                </div>
+            </div>
+            <div class="bg-slate-800/50 border border-slate-700 rounded-2xl p-5 skeleton">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-slate-400 text-sm">Taxa Sucesso</p>
+                        <p id="stat-rate" class="text-3xl font-bold text-blue-400 mt-1">—</p>
+                    </div>
+                    <div class="p-3 bg-blue-600/20 rounded-xl"><i class="fas fa-chart-line text-blue-400 text-2xl"></i></div>
+                </div>
+            </div>
+            <div class="bg-slate-800/50 border border-slate-700 rounded-2xl p-5 skeleton">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-slate-400 text-sm">Últimas 24h</p>
+                        <p id="stat-24h" class="text-3xl font-bold text-amber-400 mt-1">—</p>
+                    </div>
+                    <div class="p-3 bg-amber-600/20 rounded-xl"><i class="fas fa-clock text-amber-400 text-2xl"></i></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Search/Filter Bar -->
+        <div class="bg-slate-800/50 border border-slate-700 rounded-2xl p-4 mb-6 flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+            <div class="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+                <div class="relative flex-1 min-w-[250px]">
+                    <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-500"></i>
+                    <input type="text" id="search-input" placeholder="Buscar workflows por nome..."
+                        class="w-full bg-slate-900 border border-slate-700 rounded-xl px-10 py-2.5 focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                        oninput="debouncedSearch()">
+                </div>
+                <select id="filter-trigger" class="bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-blue-500 outline-none text-sm" onchange="fetchWorkflows()">
+                    <option value="">Todos os Triggers</option>
+                    <option value="HTTP">HTTP (Webhook)</option>
+                    <option value="SCHEDULE">Schedule</option>
+                </select>
+                <select id="filter-active" class="bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-blue-500 outline-none text-sm" onchange="fetchWorkflows()">
+                    <option value="">Todos</option>
+                    <option value="true">Ativos</option>
+                    <option value="false">Inativos</option>
+                </select>
+            </div>
+            <button onclick="fetchWorkflows()" class="px-4 py-2.5 bg-slate-700 hover:bg-slate-600 rounded-xl text-sm transition-all flex items-center gap-2">
+                <i class="fas fa-sync-alt"></i> Atualizar
+            </button>
+        </div>
+
+        <!-- Main Content Grid -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- Left Column: Workflow List -->
+            <div class="lg:col-span-1 space-y-6">
+                <div class="flex items-center justify-between">
+                    <h2 class="text-xl font-semibold flex items-center gap-2">
+                        <button type="button" id="toggle-workflows-btn" onclick="toggleWorkflowList()" title="Mostrar/ocultar workflows" aria-expanded="true" class="flex items-center gap-2 hover:text-white transition-colors"><i class="fas fa-list-ul text-blue-400"></i> Workflows</button>
+                    </h2>
+                    <span id="workflow-count" class="text-xs bg-slate-700 px-2 py-1 rounded text-slate-400">0</span>
+                </div>
+                <div id="workflow-list" class="space-y-3 max-h-[60vh] overflow-y-auto pr-2">
+                    <div class="p-4 bg-slate-800/50 rounded-xl border border-slate-700 animate-pulse skeleton text-center">
+                        Carregando workflows...
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Column: Execution Monitor -->
+            <div class="lg:col-span-2 space-y-6">
+                <h2 class="text-xl font-semibold flex items-center gap-2">
+                    <i class="fas fa-satellite-dish text-emerald-400"></i> Monitor de Execuções
+                </h2>
+                <div class="bg-slate-800/50 border border-slate-700 rounded-2xl overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left">
+                            <thead class="bg-slate-700/50 text-slate-300 text-sm">
+                                <tr>
+                                    <th class="px-5 py-3">Log ID</th>
+                                    <th class="px-5 py-3">Workflow</th>
+                                    <th class="px-5 py-3">Status</th>
+                                    <th class="px-5 py-3">Mensagem</th>
+                                    <th class="px-5 py-3 text-right">Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody id="log-table-body" class="divide-y divide-slate-700"></tbody>
+                        </table>
+                    </div>
+                    <div id="empty-logs" class="p-8 text-center text-slate-500 hidden">
+                        <i class="fas fa-folder-open text-4xl mb-3 block"></i>
+                        Nenhuma execução registrada ainda.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Workflow Modal (Create/Edit) -->
+    <div id="workflow-modal" class="modal flex items-center justify-center p-4">
+        <div class="bg-slate-800 border border-slate-700 w-full max-w-3xl rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
+            <div class="p-5 border-b border-slate-700 flex justify-between items-center bg-slate-800 flex-shrink-0">
+                <h3 id="workflow-modal-title" class="text-2xl font-bold">Criar Novo Workflow</h3>
+                <button onclick="closeModal('workflow-modal')" class="text-slate-400 hover:text-white p-2 rounded-lg hover:bg-slate-700 transition-all"><i class="fas fa-times"></i></button>
+            </div>
+            <form id="workflow-form" class="p-5 space-y-5 overflow-y-auto flex-1" onsubmit="submitWorkflow(event)">
+                <input type="hidden" id="wf-id">
+                <input type="hidden" id="wf-mode" value="create">
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm text-slate-400 mb-1">Nome do Workflow <span class="text-red-500">*</span></label>
+                        <input type="text" id="wf-name" required class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-blue-500 outline-none transition-all" placeholder="Ex: Processamento de Pedidos">
+                    </div>
+                    <div>
+                        <label class="block text-sm text-slate-400 mb-1">Trigger <span class="text-red-500">*</span></label>
+                        <select id="wf-trigger" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-blue-500 outline-none transition-all" onchange="toggleIntervalField()">
+                            <option value="HTTP">HTTP (Webhook)</option>
+                            <option value="SCHEDULE">Schedule (Agendado)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div id="interval-field" class="hidden">
+                    <label class="block text-sm text-slate-400 mb-1">Intervalo (minutos) <span class="text-red-500">*</span></label>
+                    <input type="number" id="wf-interval" min="1" max="10080" value="1" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-blue-500 outline-none transition-all">
+                </div>
+
+                <div>
+                    <label class="block text-sm text-slate-400 mb-1">Descrição</label>
+                    <textarea id="wf-description" rows="2" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-blue-500 outline-none transition-all text-sm" placeholder="Descrição opcional do workflow..."></textarea>
+                </div>
+
+                <div class="space-y-4">
+                    <div class="flex justify-between items-center border-b border-slate-700 pb-2">
+                        <h4 class="text-lg font-semibold">Passos do Fluxo</h4>
+                        <button type="button" onclick="addActionRow()" class="text-sm bg-blue-600 hover:bg-blue-500 px-3 py-1.5 rounded-lg text-white transition-all flex items-center gap-1">
+                            <i class="fas fa-plus"></i> Adicionar Ação
+                        </button>
+                    </div>
+                    <div id="actions-container" class="space-y-3">
+                        <!-- Action rows will be added here -->
+                    </div>
+                </div>
+
+                <div class="flex justify-end gap-3 pt-4 border-t border-slate-700">
+                    <button type="button" onclick="closeModal('workflow-modal')" class="px-5 py-2.5 text-slate-400 hover:text-white hover:bg-slate-700 rounded-xl transition-all">Cancelar</button>
+                    <button type="submit" id="wf-submit-btn" class="bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-2.5 rounded-xl font-semibold transition-all shadow-lg flex items-center gap-2">
+                        <i class="fas fa-save"></i> Salvar Workflow
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Workflow Detail Modal -->
+    <div id="detail-modal" class="modal flex items-center justify-center p-4">
+        <div class="bg-slate-800 border border-slate-700 w-full max-w-4xl rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
+            <div class="p-5 border-b border-slate-700 flex justify-between items-center bg-slate-800 flex-shrink-0">
+                <h3 class="text-2xl font-bold">Detalhes do Workflow</h3>
+                <button onclick="closeModal('detail-modal')" class="text-slate-400 hover:text-white p-2 rounded-lg hover:bg-slate-700 transition-all"><i class="fas fa-times"></i></button>
+            </div>
+            <div id="detail-content" class="p-5 overflow-y-auto flex-1 space-y-5">
+                <!-- Content injected here -->
+            </div>
+            <div class="p-4 bg-slate-700/30 text-right border-t border-slate-700 flex-shrink-0">
+                <button onclick="closeModal('detail-modal')" class="px-5 py-2 bg-slate-600 hover:bg-slate-500 rounded-xl text-sm transition-all">Fechar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Execution Detail Modal -->
+    <div id="exec-detail-modal" class="modal flex items-center justify-center p-4">
+        <div class="bg-slate-800 border border-slate-700 w-full max-w-3xl rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
+            <div class="p-5 border-b border-slate-700 flex justify-between items-center bg-slate-800 flex-shrink-0">
+                <h3 class="text-2xl font-bold">Timeline de Execução</h3>
+                <button onclick="closeModal('exec-detail-modal')" class="text-slate-400 hover:text-white p-2 rounded-lg hover:bg-slate-700 transition-all"><i class="fas fa-times"></i></button>
+            </div>
+            <div id="exec-detail-content" class="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
+                <!-- Steps injected here -->
+            </div>
+            <div class="p-4 bg-slate-700/30 text-right border-t border-slate-700 flex-shrink-0">
+                <button onclick="closeModal('exec-detail-modal')" class="px-5 py-2 bg-slate-600 hover:bg-slate-500 rounded-xl text-sm transition-all">Fechar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirm Delete Modal -->
+    <div id="confirm-modal" class="modal flex items-center justify-center p-4">
+        <div class="bg-slate-800 border border-slate-700 w-full max-w-md rounded-2xl shadow-2xl overflow-hidden">
+            <div class="p-5 border-b border-slate-700 bg-slate-800">
+                <h3 class="text-xl font-bold text-red-400 flex items-center gap-2"><i class="fas fa-exclamation-triangle"></i> Confirmar Exclusão</h3>
+            </div>
+            <div class="p-5 space-y-4">
+                <p class="text-slate-300" id="confirm-message">Tem certeza que deseja excluir?</p>
+                <p class="text-sm text-slate-500">Esta ação não pode ser desfeita. Todos os passos e histórico de execução serão removidos.</p>
+            </div>
+            <div class="p-4 bg-slate-700/30 flex justify-end gap-3 border-t border-slate-700">
+                <button onclick="closeModal('confirm-modal')" class="px-4 py-2 text-slate-400 hover:text-white hover:bg-slate-600 rounded-xl transition-all">Cancelar</button>
+                <button id="confirm-btn" class="px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-xl font-semibold transition-all">Excluir</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = '/api';
+        let searchDebounceTimer = null;
+        let confirmCallback = null;
+        let editingWorkflowId = null;
+
+        // ==================== UTILITIES ====================
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            const icons = { success: 'fa-check-circle', error: 'fa-times-circle', warning: 'fa-exclamation-triangle', info: 'fa-info-circle' };
+            const colors = { success: 'bg-emerald-600', error: 'bg-red-600', warning: 'bg-amber-600', info: 'bg-blue-600' };
+            toast.className = `toast ${colors[type]} text-white px-5 py-3 rounded-xl shadow-xl flex items-center gap-3 min-w-[280px] max-w-md`;
+            toast.innerHTML = `<i class="fas ${icons[type]}"></i><span>${message}</span>`;
+            container.appendChild(toast);
+            setTimeout(() => { toast.style.animation = 'slideIn 0.3s ease-out reverse'; setTimeout(() => toast.remove(), 300); }, 4000);
+        }
+
+        function setButtonLoading(btn, loading) {
+            if (loading) { btn.classList.add('btn-loading'); btn.disabled = true; }
+            else { btn.classList.remove('btn-loading'); btn.disabled = false; }
+        }
+
+        function openModal(id) { document.getElementById(id).style.display = 'flex'; document.body.style.overflow = 'hidden'; }
+        function closeModal(id) { document.getElementById(id).style.display = 'none'; document.body.style.overflow = ''; }
+
+        // ==================== AUTH ====================
+        const TOKEN_KEY = 'wf_token';
+        function getToken() { try { return localStorage.getItem(TOKEN_KEY); } catch (e) { return null; } }
+        function setToken(t) { try { if (t) localStorage.setItem(TOKEN_KEY, t); else localStorage.removeItem(TOKEN_KEY); } catch (e) {} }
+
+        function showLogin() {
+            document.getElementById('login-overlay').style.display = 'flex';
+            document.getElementById('logout-btn').style.display = 'none';
+            document.body.style.overflow = 'hidden';
+            const u = document.getElementById('login-username');
+            if (u) u.focus();
+        }
+        function hideLogin() {
+            document.getElementById('login-overlay').style.display = 'none';
+            document.getElementById('logout-btn').style.display = 'block';
+            document.body.style.overflow = '';
+        }
+        function logout() { setToken(null); showLogin(); }
+        function setLoginError(msg) {
+            const el = document.getElementById('login-error');
+            el.textContent = msg || '';
+            el.classList.toggle('hidden', !msg);
+        }
+
+        async function authCall(path) {
+            const username = document.getElementById('login-username').value.trim();
+            const password = document.getElementById('login-password').value;
+            if (!username || !password) { setLoginError('Informe usuário e senha.'); return null; }
+            return fetch(`${API_BASE}/auth/${path}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password })
+            });
+        }
+
+        async function doLogin(e) {
+            if (e) e.preventDefault();
+            setLoginError('');
+            const btn = document.getElementById('login-btn');
+            setButtonLoading(btn, true);
+            try {
+                const res = await authCall('login');
+                if (!res) return;
+                if (!res.ok) { setLoginError('Usuário ou senha inválidos.'); return; }
+                const data = await res.json();
+                setToken(data.token);
+                document.getElementById('login-password').value = '';
+                hideLogin();
+                showToast('Login realizado com sucesso!', 'success');
+                loadAll();
+            } catch (err) {
+                setLoginError('Não foi possível conectar ao servidor.');
+            } finally {
+                setButtonLoading(btn, false);
+            }
+        }
+
+        function showRegister() {
+            setLoginError('');
+            document.getElementById('login-overlay').style.display = 'none';
+            document.getElementById('register-overlay').style.display = 'flex';
+            document.getElementById('reg-username').focus();
+        }
+
+        function backToLogin() {
+            document.getElementById('register-overlay').style.display = 'none';
+            document.getElementById('login-overlay').style.display = 'flex';
+            document.getElementById('login-username').focus();
+        }
+
+        async function doRegister(e) {
+            if (e) e.preventDefault();
+            const errEl = document.getElementById('reg-error');
+            const setErr = m => { errEl.textContent = m || ''; errEl.classList.toggle('hidden', !m); };
+            setErr('');
+            const username = document.getElementById('reg-username').value.trim();
+            const password = document.getElementById('reg-password').value;
+            const confirm = document.getElementById('reg-confirm').value;
+            if (!username || !password) { setErr('Informe usuário e senha.'); return; }
+            if (password.length < 6) { setErr('A senha deve ter pelo menos 6 caracteres.'); return; }
+            if (password !== confirm) { setErr('As senhas não conferem.'); return; }
+            const btn = document.getElementById('reg-btn');
+            setButtonLoading(btn, true);
+            try {
+                const res = await fetch(`${API_BASE}/auth/register`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+                if (!res.ok) { setErr('Não foi possível criar a conta (o usuário já existe?).'); return; }
+                ['reg-username', 'reg-password', 'reg-confirm'].forEach(id => { document.getElementById(id).value = ''; });
+                document.getElementById('login-username').value = username;
+                document.getElementById('login-password').value = '';
+                backToLogin();
+                document.getElementById('login-password').focus();
+                showToast('Conta criada! Entre com sua senha.', 'success');
+            } catch (err2) {
+                setErr('Não foi possível conectar ao servidor.');
+            } finally {
+                setButtonLoading(btn, false);
+            }
+        }
+
+        async function apiRequest(endpoint, options = {}) {
+            const token = getToken();
+            const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
+            if (token) headers['Authorization'] = 'Bearer ' + token;
+            const res = await fetch(`${API_BASE}${endpoint}`, { ...options, headers });
+            if (res.status === 401 || res.status === 403) {
+                setToken(null);
+                showLogin();
+                throw new Error('Sessão expirada. Faça login novamente.');
+            }
+            if (!res.ok) {
+                const raw = await res.text().catch(() => res.statusText);
+                let msg = raw;
+                try { const j = JSON.parse(raw); msg = j.message || j.error || raw; } catch (e) {}
+                throw new Error(msg || `HTTP ${res.status}`);
+            }
+            const text = await res.text();
+            if (!text) return null;
+            try { return JSON.parse(text); } catch (e) { return text; }
+        }
+
+        // ==================== STATS ====================
+        async function fetchStats() {
+            try {
+                const data = await apiRequest('/stats');
+                document.getElementById('stat-total').textContent = data.totalWorkflows ?? 0;
+                document.getElementById('stat-active').textContent = data.activeWorkflows ?? 0;
+                document.getElementById('stat-rate').textContent = data.successRate ? `${data.successRate}%` : '—';
+                document.getElementById('stat-24h').textContent = data.executionsLast24h ?? 0;
+            } catch (e) {
+                console.error('Erro ao carregar stats:', e);
+            }
+        }
+
+        // ==================== WORKFLOWS ====================
+        async function fetchWorkflows() {
+            const list = document.getElementById('workflow-list');
+            const search = document.getElementById('search-input').value.toLowerCase();
+            const triggerFilter = document.getElementById('filter-trigger').value;
+            const activeFilter = document.getElementById('filter-active').value;
+
+            list.innerHTML = '<div class="p-4 bg-slate-800/50 rounded-xl border border-slate-700 animate-pulse skeleton text-center">Carregando...</div>';
+
+            try {
+                const data = await apiRequest('/workflows');
+                let filtered = data.filter(wf => {
+                    if (search && !wf.name.toLowerCase().includes(search)) return false;
+                    if (triggerFilter && wf.triggerType !== triggerFilter) return false;
+                    if (activeFilter !== '' && String(wf.active) !== activeFilter) return false;
+                    return true;
+                });
+
+                document.getElementById('workflow-count').textContent = `${filtered.length} workflow${filtered.length !== 1 ? 's' : ''}`;
+
+                if (filtered.length === 0) {
+                    list.innerHTML = `
+                        <div class="p-8 text-center text-slate-500 bg-slate-800/50 rounded-xl border border-slate-700">
+                            <i class="fas fa-inbox text-4xl mb-3 block text-slate-600"></i>
+                            <p class="font-medium">Nenhum workflow encontrado</p>
+                            <p class="text-sm mt-1">Clique em "Novo Workflow" para criar o primeiro</p>
+                        </div>`;
+                    return;
+                }
+
+                list.innerHTML = filtered.map(wf => `
+                    <div class="p-4 bg-slate-800/50 rounded-xl border border-slate-700 hover:border-blue-500 hover:bg-slate-800 transition-all group shadow-sm" data-id="${wf.id}">
+                        <div class="flex items-start justify-between gap-3">
+                            <div class="flex-1 min-w-0">
+                                <div class="flex items-center gap-2 flex-wrap mb-1">
+                                    <span class="text-xs font-mono text-slate-500">#${wf.id}</span>
+                                    <h3 class="font-semibold text-lg group-hover:text-blue-400 transition-colors truncate">${escapeHtml(wf.name)}</h3>
+                                    <span class="text-xs px-2 py-0.5 rounded bg-slate-700 text-slate-300">${wf.triggerType}</span>
+                                    ${wf.active ? '<span class="text-xs px-2 py-0.5 rounded bg-emerald-600/30 text-emerald-400"><i class="fas fa-circle text-[6px] mr-1"></i>Ativo</span>' : '<span class="text-xs px-2 py-0.5 rounded bg-slate-600 text-slate-400"><i class="fas fa-circle text-[6px] mr-1"></i>Inativo</span>'}
+                                </div>
+                                ${wf.description ? `<p class="text-sm text-slate-500 truncate mb-2">${escapeHtml(wf.description)}</p>` : ''}
+                                <div class="flex items-center gap-2 text-xs text-slate-500">
+                                    <span><i class="fas fa-list-ol mr-1"></i>${wf.actionCount ?? 0} ação${(wf.actionCount ?? 0) !== 1 ? 'ões' : ''}</span>
+                                    ${wf.lastExecution ? `<span><i class="fas fa-clock ml-2 mr-1"></i>Última: ${formatDate(wf.lastExecution.startTime)}</span>` : ''}
+                                </div>
+                            </div>
+                            <div class="flex gap-2 flex-shrink-0">
+                                <button onclick="openDetailModal(${wf.id})" class="p-2 bg-slate-700 hover:bg-slate-600 rounded-xl text-slate-400 hover:text-white transition-all" title="Ver detalhes"><i class="fas fa-eye"></i></button>
+                                <button onclick="openWorkflowModal(${wf.id})" class="p-2 bg-blue-600 hover:bg-blue-500 rounded-xl text-white transition-all" title="Editar"><i class="fas fa-edit"></i></button>
+                                <button onclick="executeWorkflow(${wf.id})" class="p-2 bg-emerald-600 hover:bg-emerald-500 rounded-xl text-white transition-all" title="Executar"><i class="fas fa-play"></i></button>
+                                <button onclick="confirmDeleteWorkflow(${wf.id}, '${escapeHtml(wf.name)}')" class="p-2 bg-red-600 hover:bg-red-500 rounded-xl text-white transition-all" title="Excluir"><i class="fas fa-trash"></i></button>
+                            </div>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (e) {
+                console.error('Erro ao carregar workflows:', e);
+                list.innerHTML = `<div class="p-4 bg-red-600/20 border border-red-600 rounded-xl text-red-400 text-center">Erro ao carregar workflows: ${e.message}</div>`;
+            }
+        }
+
+        function debouncedSearch() {
+            clearTimeout(searchDebounceTimer);
+            searchDebounceTimer = setTimeout(fetchWorkflows, 300);
+        }
+
+        function toggleIntervalField() {
+            const trigger = document.getElementById('wf-trigger').value;
+            document.getElementById('interval-field').classList.toggle('hidden', trigger !== 'SCHEDULE');
+        }
+
+        function openWorkflowModal(id = null) {
+            editingWorkflowId = id;
+            const modal = document.getElementById('workflow-modal');
+            const form = document.getElementById('workflow-form');
+            const title = document.getElementById('workflow-modal-title');
+            const submitBtn = document.getElementById('wf-submit-btn');
+
+            form.reset();
+            document.getElementById('actions-container').innerHTML = '';
+            document.getElementById('wf-id').value = '';
+            document.getElementById('wf-mode').value = 'create';
+            toggleIntervalField();
+
+            if (id) {
+                title.textContent = 'Editar Workflow';
+                submitBtn.innerHTML = '<i class="fas fa-save"></i> Atualizar Workflow';
+                loadWorkflowForEdit(id);
+            } else {
+                title.textContent = 'Criar Novo Workflow';
+                submitBtn.innerHTML = '<i class="fas fa-plus"></i> Criar Workflow';
+                addActionRow();
+            }
+            openModal('workflow-modal');
+        }
+
+        async function loadWorkflowForEdit(id) {
+            try {
+                const wf = await apiRequest(`/workflows/${id}`);
+                document.getElementById('wf-id').value = wf.id;
+                document.getElementById('wf-mode').value = 'edit';
+                document.getElementById('wf-name').value = wf.name;
+                document.getElementById('wf-trigger').value = wf.triggerType;
+                document.getElementById('wf-interval').value = wf.intervalMinutes || 1;
+                document.getElementById('wf-description').value = wf.description || '';
+                toggleIntervalField();
+
+                if (wf.actions && wf.actions.length > 0) {
+                    for (const action of wf.actions) {
+                        addActionRow(action);
+                    }
+                } else {
+                    addActionRow();
+                }
+            } catch (e) {
+                showToast('Erro ao carregar workflow: ' + e.message, 'error');
+            }
+        }
+
+        function addActionRow(action = null) {
+            const container = document.getElementById('actions-container');
+            const index = container.children.length + 1;
+            const row = document.createElement('div');
+            row.className = 'action-row p-4 bg-slate-900/50 border border-slate-700 rounded-xl space-y-3 relative group';
+            row.dataset.index = index;
+
+            const actionTypes = [
+                { value: 'LOG', label: 'Log', icon: 'fa-terminal' },
+                { value: 'NOTIFICATION', label: 'Notificação', icon: 'fa-bell' },
+                { value: 'HTTP', label: 'HTTP API', icon: 'fa-globe' },
+                { value: 'DATABASE', label: 'Banco de Dados', icon: 'fa-database' },
+                { value: 'DECISION', label: 'Decisão (Branch)', icon: 'fa-code-branch' },
+                { value: 'FILE', label: 'Arquivo', icon: 'fa-file' }
+            ];
+
+            row.innerHTML = `
+                <button type="button" onclick="this.parentElement.remove(); updateActionIndices()" class="absolute top-2 right-2 p-1 bg-red-600/20 hover:bg-red-600/40 text-red-400 rounded-lg transition-colors" title="Remover ação"><i class="fas fa-trash text-sm"></i></button>
+                <div class="flex items-center gap-2 text-xs text-slate-500 mb-1">
+                    <span class="px-2 py-0.5 bg-slate-700 rounded">Passo ${index}</span>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div>
+                        <label class="block text-xs text-slate-500 mb-1">Tipo de Ação</label>
+                        <select onchange="updateActionParams(this)" class="action-type w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-blue-500 transition-all">
+                            ${actionTypes.map(t => `<option value="${t.value}" ${action && action.actionType === t.value ? 'selected' : ''}><i class="fas ${t.icon} mr-1"></i>${t.label}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="md:col-span-2">
+                        <label class="block text-xs text-slate-500 mb-1">Parâmetros (JSON)</label>
+                        <textarea class="action-params w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm font-mono outline-none focus:ring-1 focus:ring-blue-500 transition-all" rows="3" placeholder='{"chave": "valor"}'></textarea>
+                    </div>
+                </div>
+            `;
+            container.appendChild(row);
+            updateActionParams(row.querySelector('.action-type'), action ? action.parameters : null);
+        }
+
+        function updateActionIndices() {
+            document.querySelectorAll('.action-row').forEach((row, i) => {
+                row.dataset.index = i + 1;
+                row.querySelector('span').textContent = `Passo ${i + 1}`;
+            });
+        }
+
+        function updateActionParams(selectElement, existingParams = null) {
+            const type = selectElement.value;
+            const paramsInput = selectElement.parentElement.nextElementSibling.querySelector('.action-params');
+            let defaultValue = '';
+
+            const templates = {
+                LOG: { message: 'Log de sistema: Processo iniciado' },
+                NOTIFICATION: { message: 'Alerta: Workflow concluído', user: 'admin' },
+                HTTP: { url: 'https://api.exemplo.com/webhook', method: 'POST', body: { status: 'ok' }, result_key: 'api_response' },
+                DATABASE: { query: 'SELECT 1', queryParams: {} },
+                DECISION: { variable: 'api_response', operator: 'EQUALS', expected_value: 'success', success_step: 2, failure_step: -1 },
+                FILE: { path: 'output.txt', content: 'Resultado do workflow' }
+            };
+
+            if (existingParams) {
+                try {
+                    const parsed = typeof existingParams === 'string' ? JSON.parse(existingParams) : existingParams;
+                    defaultValue = JSON.stringify(parsed, null, 2);
+                } catch { defaultValue = JSON.stringify(templates[type] || {}, null, 2); }
+            } else {
+                defaultValue = JSON.stringify(templates[type] || {}, null, 2);
+            }
+            paramsInput.value = defaultValue;
+        }
+
+        async function submitWorkflow(e) {
+            e.preventDefault();
+            const btn = document.getElementById('wf-submit-btn');
+            setButtonLoading(btn, true);
+
+            const id = document.getElementById('wf-id').value;
+            const mode = document.getElementById('wf-mode').value;
+            const name = document.getElementById('wf-name').value.trim();
+            const triggerType = document.getElementById('wf-trigger').value;
+            const intervalMinutes = parseInt(document.getElementById('wf-interval').value) || 1;
+            const description = document.getElementById('wf-description').value.trim();
+
+            const actionRows = document.querySelectorAll('.action-row');
+            const actions = [];
+            for (const row of actionRows) {
+                const actionType = row.querySelector('.action-type').value;
+                let parameters = row.querySelector('.action-params').value.trim();
+                try { parameters = JSON.parse(parameters); } catch { parameters = {}; }
+                actions.push({ actionType, parameters, maxRetries: 0 });
+            }
+
+            if (!name) { showToast('Nome é obrigatório', 'error'); setButtonLoading(btn, false); return; }
+            if (triggerType === 'SCHEDULE' && intervalMinutes < 1) { showToast('Intervalo deve ser >= 1', 'error'); setButtonLoading(btn, false); return; }
+
+            const payload = { name, triggerType, intervalMinutes: triggerType === 'SCHEDULE' ? intervalMinutes : null, description: description || null, active: true, actions };
+
+            try {
+                if (mode === 'edit') {
+                    await apiRequest(`/workflows/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
+                    showToast('Workflow atualizado com sucesso!', 'success');
+                } else {
+                    await apiRequest('/workflows', { method: 'POST', body: JSON.stringify(payload) });
+                    showToast('Workflow criado com sucesso!', 'success');
+                }
+                closeModal('workflow-modal');
+                fetchWorkflows();
+                fetchStats();
+            } catch (err) {
+                showToast('Erro: ' + err.message, 'error');
+            } finally {
+                setButtonLoading(btn, false);
+            }
+        }
+
+        async function executeWorkflow(id) {
+            try {
+                const data = await apiRequest(`/workflows/${id}/execute`, { method: 'POST' });
+                showToast(`Execução iniciada! Log ID: ${data.logId}`, 'success');
+                fetchLogs();
+            } catch (err) {
+                showToast('Erro ao executar: ' + err.message, 'error');
+            }
+        }
+
+        function confirmDeleteWorkflow(id, name) {
+            document.getElementById('confirm-message').innerHTML = `Excluir workflow <strong>"${escapeHtml(name)}"</strong> (ID: ${id})?`;
+            confirmCallback = () => deleteWorkflow(id);
+            openModal('confirm-modal');
+        }
+
+        async function deleteWorkflow(id) {
+            try {
+                await apiRequest(`/workflows/${id}`, { method: 'DELETE' });
+                showToast('Workflow excluído', 'success');
+                fetchWorkflows();
+                fetchStats();
+            } catch (err) {
+                showToast('Erro ao excluir: ' + err.message, 'error');
+            }
+        }
+
+        // Confirm modal handler
+        document.getElementById('confirm-btn').onclick = () => {
+            if (confirmCallback) { confirmCallback(); confirmCallback = null; }
+            closeModal('confirm-modal');
+        };
+
+        // ==================== DETAIL MODAL ====================
+        async function openDetailModal(id) {
+            openModal('detail-modal');
+            const content = document.getElementById('detail-content');
+            content.innerHTML = '<div class="p-8 text-center text-slate-500"><i class="fas fa-spinner fa-spin text-2xl mb-2"></i><p>Carregando...</p></div>';
+
+            try {
+                const wf = await apiRequest(`/workflows/${id}`);
+                const logs = await apiRequest(`/logs?workflowId=${id}&limit=10`);
+
+                content.innerHTML = `
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="bg-slate-900/50 rounded-xl p-4 border border-slate-700">
+                            <p class="text-xs text-slate-500 uppercase tracking-wider mb-1">ID</p>
+                            <p class="font-mono text-lg">${wf.id}</p>
+                        </div>
+                        <div class="bg-slate-900/50 rounded-xl p-4 border border-slate-700">
+                            <p class="text-xs text-slate-500 uppercase tracking-wider mb-1">Status</p>
+                            <p class="font-semibold ${wf.active ? 'text-emerald-400' : 'text-slate-400'}">${wf.active ? 'Ativo' : 'Inativo'}</p>
+                        </div>
+                        <div class="bg-slate-900/50 rounded-xl p-4 border border-slate-700">
+                            <p class="text-xs text-slate-500 uppercase tracking-wider mb-1">Trigger</p>
+                            <p class="font-medium">${wf.triggerType}</p>
+                        </div>
+                        <div class="bg-slate-900/50 rounded-xl p-4 border border-slate-700">
+                            <p class="text-xs text-slate-500 uppercase tracking-wider mb-1">${wf.triggerType === 'SCHEDULE' ? 'Intervalo (min)' : 'Última Execução'}</p>
+                            <p class="font-medium">${wf.triggerType === 'SCHEDULE' ? (wf.intervalMinutes || 1) : (wf.lastTriggeredAt ? formatDate(wf.lastTriggeredAt) : 'Nunca')}</p>
+                        </div>
+                    </div>
+                    ${wf.description ? `<div class="bg-slate-900/50 rounded-xl p-4 border border-slate-700"><p class="text-xs text-slate-500 uppercase tracking-wider mb-1">Descrição</p><p class="text-slate-300">${escapeHtml(wf.description)}</p></div>` : ''}
+                    <div class="border-t border-slate-700 pt-4">
+                        <div class="flex items-center justify-between mb-3">
+                            <h4 class="font-semibold text-lg">Passos do Workflow (${wf.actions?.length || 0})</h4>
+                        </div>
+                        <div class="space-y-2">
+                            ${(wf.actions || []).map((a, i) => `
+                                <div class="p-3 bg-slate-900/50 rounded-xl border border-slate-700 flex items-center gap-3">
+                                    <span class="w-8 h-8 rounded-lg bg-blue-600/20 flex items-center justify-center text-blue-400 font-bold">${i + 1}</span>
+                                    <div class="flex-1">
+                                        <p class="font-medium capitalize">${a.actionType.toLowerCase().replace('_', ' ')}</p>
+                                        <p class="text-xs text-slate-500 font-mono">${escapeHtml(JSON.stringify(a.parameters))}</p>
+                                    </div>
+                                    ${a.maxRetries > 0 ? `<span class="text-xs px-2 py-1 bg-amber-600/20 text-amber-400 rounded"><i class="fas fa-redo mr-1"></i>${a.maxRetries} retentativas</span>` : ''}
+                                </div>
+                            `).join('') || '<p class="text-slate-500 text-center py-4">Nenhum passo configurado</p>'}
+                        </div>
+                    </div>
+                    <div class="border-t border-slate-700 pt-4">
+                        <h4 class="font-semibold text-lg mb-3">Últimas Execuções</h4>
+                        <div class="space-y-2 max-h-64 overflow-y-auto">
+                            ${(logs || []).map(log => `
+                                <div class="p-3 bg-slate-900/50 rounded-xl border border-slate-700 flex items-center justify-between">
+                                    <div class="flex items-center gap-3">
+                                        <span class="px-2 py-1 rounded text-xs font-mono status-${log.status.toLowerCase()}">${log.status}</span>
+                                        <div>
+                                            <p class="font-mono text-sm">#${log.id}</p>
+                                            <p class="text-xs text-slate-500">${formatDate(log.startTime)} ${log.endTime ? `· ${log.durationMs}ms` : ''}</p>
+                                        </div>
+                                    </div>
+                                    <button onclick="openExecDetailModal(${log.id})" class="text-xs text-blue-400 hover:text-blue-300"><i class="fas fa-eye mr-1"></i>Ver</button>
+                                </div>
+                            `).join('') || '<p class="text-slate-500 text-center py-4">Nenhuma execução</p>'}
+                        </div>
+                    </div>
+                `;
+            } catch (err) {
+                content.innerHTML = `<div class="p-8 text-center text-red-400">Erro: ${err.message}</div>`;
+            }
+        }
+
+        // ==================== EXECUTION DETAIL ====================
+        async function openExecDetailModal(logId) {
+            openModal('exec-detail-modal');
+            const content = document.getElementById('exec-detail-content');
+            content.innerHTML = '<div class="p-8 text-center text-slate-500"><i class="fas fa-spinner fa-spin text-2xl mb-2"></i><p>Carregando...</p></div>';
+
+            try {
+                const steps = await apiRequest(`/logs/${logId}/details`);
+                const log = await apiRequest(`/logs/${logId}`);
+
+                content.innerHTML = `
+                    <div class="bg-slate-900/50 rounded-xl p-4 border border-slate-700 mb-4">
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                            <div><p class="text-slate-500">Log ID</p><p class="font-mono">${log.id}</p></div>
+                            <div><p class="text-slate-500">Workflow</p><p class="font-medium">${log.workflow?.name || 'N/A'}</p></div>
+                            <div><p class="text-slate-500">Status</p><p class="font-semibold status-${log.status.toLowerCase()}">${log.status}</p></div>
+                            <div><p class="text-slate-500">Duração</p><p class="font-mono">${log.durationMs ?? '—'}ms</p></div>
+                        </div>
+                    </div>
+                    <div class="space-y-3">
+                        ${(steps || []).map((step, i) => `
+                            <div class="p-4 bg-slate-900/50 rounded-xl border border-slate-700">
+                                <div class="flex items-start gap-3">
+                                    <div class="w-8 h-8 rounded-lg bg-blue-600/20 flex items-center justify-center text-blue-400 font-bold flex-shrink-0">${step.stepOrder}</div>
+                                    <div class="flex-1">
+                                        <div class="flex items-center gap-2 mb-2">
+                                            <span class="px-2 py-1 rounded text-xs font-medium capitalize bg-slate-700 text-slate-300">${step.actionType.toLowerCase()}</span>
+                                            <span class="px-2 py-1 rounded text-xs font-medium status-${step.status.toLowerCase()}">${step.status}</span>
+                                            ${step.durationMs !== undefined ? `<span class="text-xs text-slate-500">${step.durationMs}ms</span>` : ''}
+                                        </div>
+                                        <p class="text-sm text-slate-300 font-mono">${escapeHtml(step.message)}</p>
+                                        ${step.contextSnapshot ? `<details class="mt-2"><summary class="text-xs text-slate-500 cursor-pointer">Contexto (clique para expandir)</summary><pre class="mt-2 text-[10px] text-slate-400 bg-slate-900 p-2 rounded overflow-auto max-h-40">${escapeHtml(step.contextSnapshot)}</pre></details>` : ''}
+                                    </div>
+                                </div>
+                            </div>
+                        `).join('') || '<p class="text-slate-500 text-center py-4">Nenhum passo registrado</p>'}
+                    </div>
+                `;
+            } catch (err) {
+                content.innerHTML = `<div class="p-8 text-center text-red-400">Erro: ${err.message}</div>`;
+            }
+        }
+
+        // ==================== LOGS ====================
+        async function fetchLogs() {
+            const body = document.getElementById('log-table-body');
+            const empty = document.getElementById('empty-logs');
+
+            try {
+                const data = await apiRequest('/logs?limit=50');
+                if (data && data.length > 0) {
+                    empty.classList.add('hidden');
+                    body.innerHTML = data.reverse().map(log => `
+                        <tr class="hover:bg-slate-700/30 transition-colors">
+                            <td class="px-5 py-3 font-mono text-sm">${log.id}</td>
+                            <td class="px-5 py-3 font-medium">${log.workflow ? escapeHtml(log.workflow.name) : '<span class="text-slate-500">N/A</span>'}</td>
+                            <td class="px-5 py-3"><span class="status-${log.status.toLowerCase()}">${log.status}</span></td>
+                            <td class="px-5 py-3 text-slate-400 text-sm truncate max-w-xs">${escapeHtml(log.message || '')}</td>
+                            <td class="px-5 py-3 text-right">
+                                <button onclick="openExecDetailModal(${log.id})" class="text-slate-400 hover:text-white p-2 rounded-lg hover:bg-slate-700 transition-all" title="Ver detalhes"><i class="fas fa-eye"></i></button>
+                            </td>
+                        </tr>
+                    `).join('');
+                } else {
+                    empty.classList.remove('hidden');
+                    body.innerHTML = '';
+                }
+            } catch (e) {
+                console.error('Erro ao carregar logs:', e);
+            }
+        }
+
+        // ==================== HELPERS ====================
+        function escapeHtml(text) {
+            if (text === null || text === undefined) return '';
+            return String(text).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+        }
+        function formatDate(iso) { if (!iso) return '—'; const d = new Date(iso); return d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); }
+
+        // ==================== INIT ====================
+        function toggleWorkflowList() {
+            const list = document.getElementById('workflow-list');
+            const btn = document.getElementById('toggle-workflows-btn');
+            const wasHidden = list.style.display === 'none';
+            list.style.display = wasHidden ? '' : 'none';
+            btn.setAttribute('aria-expanded', wasHidden ? 'true' : 'false');
+            btn.classList.toggle('opacity-60', !wasHidden);
+        }
+        function loadAll() { fetchWorkflows(); fetchLogs(); fetchStats(); }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            document.querySelectorAll('.modal').forEach(m => { m.style.display = 'none'; });
+            if (getToken()) { hideLogin(); loadAll(); } else { showLogin(); }
+            setInterval(() => { if (getToken()) fetchLogs(); }, 5000);
+            setInterval(() => { if (getToken()) fetchStats(); }, 30000);
+        });
+
+        // Close modals on backdrop click
+        document.querySelectorAll('.modal').forEach(modal => {
+            modal.addEventListener('click', e => { if (e.target === modal) closeModal(modal.id); });
+        });
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape') document.querySelectorAll('.modal').forEach(m => closeModal(m.id));
+            if (e.key === 'n' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); openWorkflowModal(); }
+        });
+    </script>
+</body>
+</html>
