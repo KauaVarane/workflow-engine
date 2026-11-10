@@ -5,9 +5,10 @@ services:
     environment:
       - POSTGRES_DB=workflow_engine
       - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=12022007
+      # Senha SOMENTE de desenvolvimento local. Para trocar: crie um arquivo .env com DB_PASSWORD=...
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-postgres}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -24,7 +25,9 @@ services:
     environment:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://db:5432/workflow_engine
       - SPRING_DATASOURCE_USERNAME=postgres
-      - SPRING_DATASOURCE_PASSWORD=12022007
+      - SPRING_DATASOURCE_PASSWORD=${DB_PASSWORD:-postgres}
+      # Chave SOMENTE de desenvolvimento local (nao use em producao). Para trocar: JWT_SECRET no arquivo .env
+      - JWT_SECRET=${JWT_SECRET:-ZGV2LW9ubHktTkFPLVVTRS1FTS1QUk9EVUNBTy1jaGF2ZS1sb2NhbC0xMjM=}
     depends_on:
       db:
         condition: service_healthy
