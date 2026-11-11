@@ -10,6 +10,7 @@ Motor de **workflows** em Java: um gatilho (HTTP ou agendado) dispara uma sequê
 - Swagger / springdoc-openapi, Validation, Actuator, Lombok
 - Dashboard em HTML + JavaScript (Tailwind CSS e Font Awesome via CDN)
 - Docker e Docker Compose
+- Claude Code
 
 ## Telas
 
