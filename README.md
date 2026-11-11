@@ -28,6 +28,24 @@ Com a aplicação rodando, existem duas formas de usar:
 
 Serve para testar os endpoints diretamente (veja "Autenticação").
 
+## Modelagem
+
+Antes de programar, o sistema foi modelado com dois diagramas UML.
+
+**Casos de uso**
+
+![Diagrama de casos de uso](docs/diagrama-casos-de-uso.png)
+
+**Diagrama de classes**
+
+![Diagrama de classes](docs/diagrama-de-classes.png)
+
+> Os diagramas são o **projeto original** do sistema. Algumas peças planejadas (como gatilho por e-mail, ações de Telegram, e-mail e Google Drive, e contas externas) não estão implementadas. A implementação atual está descrita nas seções de telas, endpoints e tipos de ação.
+
+## Como foi feito
+
+Projeto desenvolvido com apoio do **Claude Code** (assistente de programação da Anthropic), com a modelagem, as decisões de projeto e os testes conduzidos por mim.
+
 ## Como rodar (Docker Compose)
 
 Requisito: Docker Desktop aberto.
