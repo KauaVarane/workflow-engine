@@ -1,6 +1,6 @@
 # Workflow Engine
 
-API REST em Java para criar e executar **workflows**: um gatilho (HTTP ou agendado) dispara uma sequência de ações, e cada execução gera logs. Projeto de portfólio.
+Motor de **workflows** em Java: um gatilho (HTTP ou agendado) dispara uma sequência de ações, e cada execução gera logs. Tem uma **API REST** (com Swagger) e um **dashboard web** para gerenciar tudo pelo navegador. Projeto de portfólio.
 
 ## Tecnologias
 
@@ -8,7 +8,25 @@ API REST em Java para criar e executar **workflows**: um gatilho (HTTP ou agenda
 - Spring Data JPA, PostgreSQL, Flyway (migrações em `src/main/resources/db`)
 - Spring Security com JWT (jjwt)
 - Swagger / springdoc-openapi, Validation, Actuator, Lombok
+- Dashboard em HTML + JavaScript (Tailwind CSS e Font Awesome via CDN)
 - Docker e Docker Compose
+
+## Telas
+
+Com a aplicação rodando, existem duas formas de usar:
+
+**1. Dashboard (interface visual)**: http://localhost:8080
+
+- Tela de login e de **Criar conta** (a senha precisa ter pelo menos 6 caracteres). Botão **Sair** no canto inferior esquerdo.
+- Cards com total de workflows, ativos, taxa de sucesso e execuções das últimas 24h.
+- Lista de workflows com busca por nome e filtros por tipo de gatilho (HTTP ou Schedule) e por ativo/inativo.
+- **Novo Workflow**: nome, gatilho, intervalo (no caso de Schedule), descrição e os passos (ações) com parâmetros em JSON.
+- Para cada workflow: ver detalhes, editar, **executar** e excluir.
+- **Monitor de Execuções**: tabela de logs (atualiza sozinha a cada 5 segundos) e, ao clicar no olho, a linha do tempo de cada passo.
+
+**2. Swagger (documentação da API)**: http://localhost:8080/swagger-ui/index.html
+
+Serve para testar os endpoints diretamente (veja "Autenticação").
 
 ## Como rodar (Docker Compose)
 
@@ -18,7 +36,7 @@ Requisito: Docker Desktop aberto.
 docker compose up --build
 ```
 
-Depois, abra o Swagger: http://localhost:8080/swagger-ui/index.html
+Depois, abra o dashboard em http://localhost:8080 ou o Swagger em http://localhost:8080/swagger-ui/index.html.
 
 O `docker-compose.yml` já traz uma senha de banco e uma chave JWT **somente de desenvolvimento local**. Para trocá-las, crie um arquivo `.env` na raiz (ele não vai para o Git):
 
@@ -48,10 +66,14 @@ Depois: `./mvnw spring-boot:run` (no Windows: `.\mvnw spring-boot:run`).
 
 ## Autenticação
 
+No **dashboard**, crie uma conta em "Criar conta" e entre com usuário e senha. O token JWT fica guardado no navegador e é enviado automaticamente. Se a sessão expirar, a tela de login aparece de novo.
+
+No **Swagger**:
+
 1. `POST /api/auth/register` com `{"username": "...", "password": "..."}` cria a conta.
 2. `POST /api/auth/login` com o mesmo corpo devolve `{"token": "...", "username": "..."}`.
-3. No Swagger, clique em **Authorize** e cole o token (formato Bearer).
-4. Os demais endpoints exigem o token. São públicos: `/api/auth/**`, Swagger, `/actuator/health` e `/actuator/info`.
+3. Clique em **Authorize** e cole o token (formato Bearer).
+4. Os demais endpoints exigem o token. São públicos: o dashboard (`/`), `/api/auth/**`, Swagger, `/actuator/health` e `/actuator/info`.
 
 ## Endpoints principais
 
@@ -90,11 +112,14 @@ Exemplo de corpo para criar um workflow:
 }
 ```
 
-Tipos de ação: LOG, DATABASE, FILE, HTTP, DECISION, NOTIFICATION e WINDOWS_NOTIFICATION.
+Tipos de ação da API: LOG, DATABASE, FILE, HTTP, DECISION, NOTIFICATION e WINDOWS_NOTIFICATION. O dashboard oferece LOG, NOTIFICATION, HTTP, DATABASE, DECISION e FILE.
 
 ## Demonstração online (Render, plano gratuito)
 
-https://workflow-engine-h3g5.onrender.com/swagger-ui/index.html
+- Dashboard: https://workflow-engine-h3g5.onrender.com
+- Swagger: https://workflow-engine-h3g5.onrender.com/swagger-ui/index.html
+
+Avisos:
 
 - O plano gratuito "dorme" após 15 minutos sem uso: a **primeira abertura leva cerca de 1 a 2 minutos**.
 - O banco gratuito do Render expira e precisa ser recriado (as tabelas são recriadas pelo Flyway). Dados de teste podem sumir.
@@ -106,4 +131,5 @@ https://workflow-engine-h3g5.onrender.com/swagger-ui/index.html
 - `DELETE /api/logs` apaga os logs de **todos** os usuários.
 - A ação **DATABASE** executa SQL. Ela fica desligada no Render (`WORKFLOW_DATABASE_ACTION_ENABLED=false`).
 - A ação **FILE** é restrita a uma pasta própria (bloqueia `../` e caminhos absolutos), mas não limita o tamanho nem a quantidade de arquivos. No Render gratuito os arquivos somem ao reiniciar.
+- O dashboard carrega Tailwind e Font Awesome de CDNs, então precisa de internet para ficar com o visual completo.
 - É um projeto de portfólio: **não use dados reais**.
